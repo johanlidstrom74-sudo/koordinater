@@ -87,4 +87,470 @@
           <div class="row3">
             <div>
               <label for="hVal">Höjd (m) (valfri)</label>
-              <input id="hVal" inputmode="decimal" placeholder="t.ex. 12.34" /
+              <input id="hVal" inputmode="decimal" placeholder="t.ex. 12.34" />
+            </div>
+            <div>
+              <label for="fromH">Från höjdsystem</label>
+              <select id="fromH"></select>
+            </div>
+            <div>
+              <label for="toH">Till höjdsystem</label>
+              <select id="toH"></select>
+            </div>
+          </div>
+
+          <div class="btnrow">
+            <button class="primary" id="btnConvert">Konvertera</button>
+            <button class="ghost" id="btnSwap">Byt från/till</button>
+            <button class="ghost" id="btnClear">Rensa</button>
+            <button class="ghost" id="btnCopy">Kopiera resultat</button>
+          </div>
+
+          <p class="hint">
+            Tips: För projicerade system skriver du normalt <span class="pill">N (northing)</span> och <span class="pill">E (easting)</span>.
+            För WGS84 skriver du <span class="pill">Lat</span> och <span class="pill">Lon</span>. Appen byter etiketter automatiskt.
+          </p>
+
+          <details>
+            <summary>Info: äldre Göteborgssystem</summary>
+            <p class="hint">
+              Göteborg gick 2009 över från ett äldre lokalt referenssystem i plan (använt i över 100 år) till SWEREF 99 (i praktiken zon <code class="k">12 00</code>). :contentReference[oaicite:3]{index=3}
+              <br><br>
+              Det äldre lokala plansystemet är inte ett “standard-EPSG” som kan definieras generellt i Proj4 utan kräver normalt ett lokalt transformationssamband/restfelsmodell. Lantmäteriet beskriver att många kommuner hade egna lokala plansystem och att det finns många olika samband. :contentReference[oaicite:4]{index=4}
+              <br><br>
+              Höjd: Göteborg bytte 28 jan 2013 från GH88 till RH2000 och den relativa skillnaden anges som <code class="k">9,953 m</code>. :contentReference[oaicite:5]{index=5}
+            </p>
+          </details>
+        </div>
+
+        <!-- BATCH -->
+        <div id="panelBatch" style="display:none">
+          <div class="row">
+            <div>
+              <label for="fromCrsB">Från koordinatsystem (plan)</label>
+              <select id="fromCrsB"></select>
+            </div>
+            <div>
+              <label for="toCrsB">Till koordinatsystem (plan)</label>
+              <select id="toCrsB"></select>
+            </div>
+          </div>
+
+          <div class="row">
+            <div>
+              <label for="fromHB">Från höjdsystem</label>
+              <select id="fromHB"></select>
+            </div>
+            <div>
+              <label for="toHB">Till höjdsystem</label>
+              <select id="toHB"></select>
+            </div>
+          </div>
+
+          <label for="batchIn">Indata (en punkt per rad)</label>
+          <textarea id="batchIn" placeholder="Exempel (projicerat) N E [H]:
+6400000  320000  12.3
+6400100  320050  12.9
+
+Exempel (WGS84) Lat Lon [H]:
+57.707233  11.967017  12.3"></textarea>
+
+          <div class="btnrow">
+            <button class="primary" id="btnConvertBatch">Konvertera batch</button>
+            <button class="ghost" id="btnCopyBatch">Kopiera utdata</button>
+            <button class="ghost" id="btnClearBatch">Rensa</button>
+          </div>
+
+          <p class="hint">
+            Separatorer: mellanslag, tab, komma eller semikolon.
+            För projicerade system tolkar vi raden som <b>N E</b> (och ev. <b>H</b> som tredje kolumn).
+            För WGS84 tolkar vi som <b>Lat Lon</b> (och ev. <b>H</b>).
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+          <div class="pill" id="statusPill">Redo</div>
+          <div class="pill" id="mapPill" style="display:none">
+            <a id="mapLink" href="#" target="_blank" rel="noopener">Öppna i Google Maps</a>
+          </div>
+        </div>
+
+        <label>Resultat</label>
+        <div class="out" id="out">—</div>
+
+        <div class="hint">
+          “WGS84 (kontroll)” visar samma position i decimalgrader + DMS (grader/minuter/sekunder).
+          Höjd omräknas endast om du anger ett H-värde och väljer höjdsystem.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proj4js -->
+  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
+  <script>
+    // --- CRS registry (common in Sweden) ---
+    const CRS = [
+      { code:"EPSG:4326", name:"WGS84 (lat/lon)", type:"geographic" },
+      { code:"EPSG:3006", name:"SWEREF 99 TM (EPSG:3006)", type:"projected" },
+      { code:"EPSG:3007", name:"SWEREF 99 12 00 (Göteborg) (EPSG:3007)", type:"projected" },
+      { code:"EPSG:3008", name:"SWEREF 99 13 30 (EPSG:3008)", type:"projected" },
+      { code:"EPSG:3009", name:"SWEREF 99 15 00 (EPSG:3009)", type:"projected" },
+      { code:"EPSG:3010", name:"SWEREF 99 16 30 (EPSG:3010)", type:"projected" },
+      { code:"EPSG:3011", name:"SWEREF 99 18 00 (EPSG:3011)", type:"projected" },
+      { code:"EPSG:3021", name:"RT90 2.5 gon V (EPSG:3021)", type:"projected" },
+      { code:"EPSG:32633", name:"WGS84 / UTM zone 33N (EPSG:32633)", type:"projected" },
+      { code:"EPSG:32632", name:"WGS84 / UTM zone 32N (EPSG:32632)", type:"projected" },
+      { code:"EPSG:3857", name:"Web Mercator (EPSG:3857)", type:"projected" },
+    ];
+
+    // Höjdsystem (bara enkel offset här, ingen geoidmodell)
+    const HEIGHT = [
+      { code:"none",  name:"Ingen / lämna oförändrat" },
+      { code:"RH2000",name:"RH2000" },
+      { code:"GH88",  name:"GH88 (Göteborg, äldre)" },
+    ];
+
+    // Göteborg: GH88 -> RH2000: -9,953 m (RH2000 = GH88 - 9,953)
+    const GH88_TO_RH2000 = 9.953;
+
+    // --- Define projections ---
+    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3007", "+proj=tmerc +lat_0=0 +lon_0=12 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3008", "+proj=tmerc +lat_0=0 +lon_0=13.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3009", "+proj=tmerc +lat_0=0 +lon_0=15 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3010", "+proj=tmerc +lat_0=0 +lon_0=16.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3011", "+proj=tmerc +lat_0=0 +lon_0=18 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:3021", "+proj=tmerc +lat_0=0 +lon_0=15.8082777777778 +k=1 +x_0=1500000 +y_0=0 +ellps=bessel +towgs84=414.1,41.3,603.1,-0.855,2.141,-7.023,0 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:32633", "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:32632", "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs");
+    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
+    proj4.defs("EPSG:3857", "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs +type=crs");
+
+    // --- UI helpers ---
+    const $ = (id) => document.getElementById(id);
+    const statusPill = $("statusPill");
+    const out = $("out");
+    const mapPill = $("mapPill");
+    const mapLink = $("mapLink");
+
+    function setStatus(msg, isError=false){
+      statusPill.textContent = msg;
+      statusPill.classList.toggle("err", !!isError);
+    }
+
+    function fillSelect(sel, items, defaultCode){
+      sel.innerHTML = "";
+      items.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.code;
+        opt.textContent = c.name;
+        sel.appendChild(opt);
+      });
+      sel.value = defaultCode || items[0].code;
+    }
+
+    function getCrs(code){
+      const c = CRS.find(x => x.code === code);
+      if(!c) throw new Error("Okänt CRS: " + code);
+      return c;
+    }
+
+    function updateLabels(fromCode){
+      const from = getCrs(fromCode);
+      if(from.type === "geographic"){
+        $("aLabel").textContent = "Lat (N)";
+        $("bLabel").textContent = "Lon (E)";
+        $("aVal").placeholder = "t.ex. 57.707233 eller 57 42 26.0";
+        $("bVal").placeholder = "t.ex. 11.967017 eller 11 58 1.3";
+      } else {
+        $("aLabel").textContent = "N (northing)";
+        $("bLabel").textContent = "E (easting)";
+        $("aVal").placeholder = "t.ex. 6400000.00";
+        $("bVal").placeholder = "t.ex. 320000.00";
+      }
+    }
+
+    // --- Parsing ---
+    function parseNumberFlexible(s){
+      if(!s) return NaN;
+      return Number(String(s).trim().replace(",", "."));
+    }
+
+    function parseAngleFlexible(s){
+      s = String(s || "").trim();
+      if(!s) return NaN;
+      const n = parseNumberFlexible(s);
+      if(Number.isFinite(n)) return n;
+
+      const cleaned = s
+        .replace(/[°º]/g," ")
+        .replace(/[′']/g," ")
+        .replace(/[″"]/g," ")
+        .replace(/[NSEW]/gi," ")
+        .replace(/,/g,".")
+        .trim();
+
+      const parts = cleaned.split(/\s+/).filter(Boolean).map(x => Number(x));
+      if(parts.length === 0 || parts.some(x => !Number.isFinite(x))) return NaN;
+
+      const deg = parts[0];
+      const min = parts.length > 1 ? parts[1] : 0;
+      const sec = parts.length > 2 ? parts[2] : 0;
+
+      const sign = deg < 0 ? -1 : 1;
+      const abs = Math.abs(deg) + (min/60) + (sec/3600);
+      return sign * abs;
+    }
+
+    function toDMS(deg){
+      const sign = deg < 0 ? -1 : 1;
+      let a = Math.abs(deg);
+      const d = Math.floor(a);
+      a = (a - d) * 60;
+      const m = Math.floor(a);
+      const s = (a - m) * 60;
+      const dd = sign < 0 ? -d : d;
+      return `${dd}° ${m}' ${s.toFixed(3)}"`;
+    }
+
+    function toProjInput(crs, a, b){
+      if(crs.type === "geographic"){
+        const lat = a, lon = b;
+        return [lon, lat]; // proj4 wants [lon,lat]
+      } else {
+        const N = a, E = b;
+        return [E, N]; // proj4 wants [E,N]
+      }
+    }
+
+    function fromProjOutput(crs, xy){
+      if(crs.type === "geographic"){
+        const lon = xy[0], lat = xy[1];
+        return { lat, lon };
+      } else {
+        const E = xy[0], N = xy[1];
+        return { N, E };
+      }
+    }
+
+    function formatOut(target, obj){
+      if(target.type === "geographic"){
+        return `Lat: ${obj.lat.toFixed(8)}\n     DMS: ${toDMS(obj.lat)}\nLon: ${obj.lon.toFixed(8)}\n     DMS: ${toDMS(obj.lon)}`;
+      }
+      return `N: ${obj.N.toFixed(3)}\nE: ${obj.E.toFixed(3)}`;
+    }
+
+    // --- Height conversion (simple) ---
+    function convertHeight(h, fromH, toH){
+      if(!Number.isFinite(h)) return NaN;
+      if(fromH === "none" || toH === "none" || fromH === toH) return h;
+
+      if(fromH === "GH88" && toH === "RH2000") return h - GH88_TO_RH2000;
+      if(fromH === "RH2000" && toH === "GH88") return h + GH88_TO_RH2000;
+
+      // unknown combination (future-proof)
+      return NaN;
+    }
+
+    function formatHeightBlock(hIn, fromH, hOut, toH){
+      if(!Number.isFinite(hIn)) return "";
+      if(fromH === "none" || toH === "none") return `\n🏔️ Höjd: ${hIn.toFixed(3)} m (ingen omräkning)\n`;
+      if(Number.isFinite(hOut)){
+        return `\n🏔️ Höjd\nH (${fromH}): ${hIn.toFixed(3)} m\nH (${toH}): ${hOut.toFixed(3)} m\n`;
+      }
+      return `\n🏔️ Höjd: (kunde inte räkna om för ${fromH} → ${toH})\n`;
+    }
+
+    function compute(){
+      try{
+        setStatus("Konverterar…");
+        mapPill.style.display = "none";
+
+        const fromCode = $("fromCrs").value;
+        const toCode = $("toCrs").value;
+        const from = getCrs(fromCode);
+        const to = getCrs(toCode);
+
+        let aRaw = $("aVal").value;
+        let bRaw = $("bVal").value;
+
+        const a = (from.type === "geographic") ? parseAngleFlexible(aRaw) : parseNumberFlexible(aRaw);
+        const b = (from.type === "geographic") ? parseAngleFlexible(bRaw) : parseNumberFlexible(bRaw);
+
+        if(!Number.isFinite(a) || !Number.isFinite(b)) throw new Error("Ogiltig indata. Kontrollera värdena.");
+
+        const inXY = toProjInput(from, a, b);
+        const outXY = proj4(from.code, to.code, inXY);
+        const outObj = fromProjOutput(to, outXY);
+
+        // WGS84 for sanity/map link
+        const wgsXY = proj4(from.code, "EPSG:4326", inXY);
+        const wgs = fromProjOutput(getCrs("EPSG:4326"), wgsXY);
+
+        // Height optional
+        const hIn = parseNumberFlexible($("hVal").value);
+        const fromH = $("fromH").value;
+        const toH = $("toH").value;
+        const hOut = convertHeight(hIn, fromH, toH);
+        const hBlock = formatHeightBlock(hIn, fromH, hOut, toH);
+
+        const block =
+`🎯 Till (plan): ${to.name}
+${formatOut(to, outObj)}${hBlock}
+🧭 WGS84 (kontroll)
+${formatOut(getCrs("EPSG:4326"), wgs)}
+`;
+        out.textContent = block;
+        setStatus("Klar");
+
+        if(Number.isFinite(wgs.lat) && Number.isFinite(wgs.lon) && Math.abs(wgs.lat) <= 90 && Math.abs(wgs.lon) <= 180){
+          mapLink.href = `https://www.google.com/maps?q=${encodeURIComponent(wgs.lat + "," + wgs.lon)}`;
+          mapPill.style.display = "inline-flex";
+        }
+      }catch(e){
+        out.textContent = "—";
+        setStatus(e.message || "Fel", true);
+      }
+    }
+
+    function swapFromTo(){
+      const a = $("fromCrs").value;
+      $("fromCrs").value = $("toCrs").value;
+      $("toCrs").value = a;
+      updateLabels($("fromCrs").value);
+    }
+
+    async function copyText(text){
+      try{
+        await navigator.clipboard.writeText(text);
+        setStatus("Kopierat!");
+      }catch{
+        setStatus("Kunde inte kopiera (webbläsarbegränsning).", true);
+      }
+    }
+
+    // --- Batch ---
+    function parseLine(line){
+      const parts = line.trim().split(/[,\s;]+/).filter(Boolean);
+      if(parts.length < 2) return null;
+      return parts; // 2 or 3 columns
+    }
+
+    function computeBatch(){
+      try{
+        setStatus("Konverterar batch…");
+        const fromCode = $("fromCrsB").value;
+        const toCode = $("toCrsB").value;
+        const from = getCrs(fromCode);
+        const to = getCrs(toCode);
+
+        const fromH = $("fromHB").value;
+        const toH = $("toHB").value;
+
+        const lines = $("batchIn").value.split(/\r?\n/);
+        const outLines = [];
+        outLines.push(`# from(plan): ${from.name}`);
+        outLines.push(`# to(plan):   ${to.name}`);
+        outLines.push(`# from(H):    ${fromH}`);
+        outLines.push(`# to(H):      ${toH}`);
+        outLines.push(`# format: ${to.type === "geographic" ? "lat lon" : "N E"}${(toH !== "none") ? " [H]" : ""}`);
+        outLines.push("");
+
+        let ok = 0;
+        for(const ln of lines){
+          if(!ln.trim()) continue;
+          const cols = parseLine(ln);
+          if(!cols){ outLines.push(`# skip: ${ln}`); continue; }
+
+          const a = (from.type === "geographic") ? parseAngleFlexible(cols[0]) : parseNumberFlexible(cols[0]);
+          const b = (from.type === "geographic") ? parseAngleFlexible(cols[1]) : parseNumberFlexible(cols[1]);
+          if(!Number.isFinite(a) || !Number.isFinite(b)){
+            outLines.push(`# bad: ${ln}`);
+            continue;
+          }
+
+          const inXY = toProjInput(from, a, b);
+          const outXY = proj4(from.code, to.code, inXY);
+          const obj = fromProjOutput(to, outXY);
+
+          // optional height
+          let hOutStr = "";
+          if(cols.length >= 3){
+            const hIn = parseNumberFlexible(cols[2]);
+            if(Number.isFinite(hIn)){
+              const hOut = convertHeight(hIn, fromH, toH);
+              if(toH === "none" || fromH === "none" || fromH === toH){
+                hOutStr = ` ${hIn.toFixed(3)}`;
+              } else if(Number.isFinite(hOut)){
+                hOutStr = ` ${hOut.toFixed(3)}`;
+              } else {
+                hOutStr = ` NaN`;
+              }
+            }
+          }
+
+          if(to.type === "geographic"){
+            outLines.push(`${obj.lat.toFixed(8)} ${obj.lon.toFixed(8)}${hOutStr}`);
+          } else {
+            outLines.push(`${obj.N.toFixed(3)} ${obj.E.toFixed(3)}${hOutStr}`);
+          }
+          ok++;
+        }
+
+        out.textContent = outLines.join("\n");
+        setStatus(`Klar (rader: ${ok})`);
+        mapPill.style.display = "none";
+      }catch(e){
+        out.textContent = "—";
+        setStatus(e.message || "Fel", true);
+      }
+    }
+
+    // --- Init ---
+    fillSelect($("fromCrs"), CRS, "EPSG:4326");
+    fillSelect($("toCrs"), CRS, "EPSG:3007");
+    fillSelect($("fromCrsB"), CRS, "EPSG:3007");
+    fillSelect($("toCrsB"), CRS, "EPSG:4326");
+
+    fillSelect($("fromH"), HEIGHT, "none");
+    fillSelect($("toH"), HEIGHT, "none");
+    fillSelect($("fromHB"), HEIGHT, "none");
+    fillSelect($("toHB"), HEIGHT, "none");
+
+    updateLabels($("fromCrs").value);
+    $("fromCrs").addEventListener("change", () => updateLabels($("fromCrs").value));
+
+    $("btnConvert").addEventListener("click", compute);
+    $("btnSwap").addEventListener("click", swapFromTo);
+    $("btnClear").addEventListener("click", () => {
+      $("aVal").value=""; $("bVal").value=""; $("hVal").value="";
+      $("fromH").value="none"; $("toH").value="none";
+      out.textContent="—"; setStatus("Redo"); mapPill.style.display="none";
+    });
+    $("btnCopy").addEventListener("click", () => copyText(out.textContent));
+
+    $("btnConvertBatch").addEventListener("click", computeBatch);
+    $("btnCopyBatch").addEventListener("click", () => copyText(out.textContent));
+    $("btnClearBatch").addEventListener("click", () => {
+      $("batchIn").value="";
+      $("fromHB").value="none"; $("toHB").value="none";
+      out.textContent="—"; setStatus("Redo");
+    });
+
+    // Tabs
+    $("tabSingle").addEventListener("click", () => {
+      $("tabSingle").classList.add("active"); $("tabBatch").classList.remove("active");
+      $("panelSingle").style.display = ""; $("panelBatch").style.display = "none";
+      setStatus("Redo"); mapPill.style.display="none"; out.textContent="—";
+    });
+    $("tabBatch").addEventListener("click", () => {
+      $("tabBatch").classList.add("active"); $("tabSingle").classList.remove("active");
+      $("panelBatch").style.display = ""; $("panelSingle").style.display = "none";
+      setStatus("Redo"); mapPill.style.display="none"; out.textContent="—";
+    });
+  </script>
+</body>
+</html>
