@@ -8,11 +8,11 @@
     :root { --bg:#0b1020; --card:#121a33; --text:#e8ecff; --muted:#aab3e6; --line:#263056; }
     *{box-sizing:border-box}
     body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:linear-gradient(180deg,#070a14, var(--bg));color:var(--text)}
-    .wrap{max-width:980px;margin:0 auto;padding:20px}
+    .wrap{max-width:1040px;margin:0 auto;padding:20px}
     h1{font-size:20px;margin:0 0 12px}
     .sub{color:var(--muted);margin:0 0 18px;line-height:1.4}
     .grid{display:grid;gap:14px}
-    @media(min-width:860px){ .grid{grid-template-columns:1.2fr .8fr} }
+    @media(min-width:920px){ .grid{grid-template-columns:1.2fr .8fr} }
     .card{background:rgba(18,26,51,.92);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
     label{display:block;font-size:12px;color:var(--muted);margin:10px 0 6px}
     select,input,textarea,button{
@@ -23,6 +23,8 @@
     textarea{min-height:140px;resize:vertical}
     .row{display:grid;grid-template-columns:1fr;gap:12px}
     @media(min-width:560px){ .row{grid-template-columns:1fr 1fr} }
+    .row3{display:grid;grid-template-columns:1fr;gap:12px}
+    @media(min-width:760px){ .row3{grid-template-columns:1fr 1fr 1fr} }
     .btnrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
     button{cursor:pointer}
     button.primary{background:#1b2a66}
@@ -37,14 +39,18 @@
     .hint{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.4}
     .err{color:#ffb3b3}
     a{color:#bcd0ff}
+    details{margin-top:10px}
+    summary{cursor:pointer;color:var(--text)}
+    code.k{background:#0a1026;border:1px solid var(--line);padding:2px 6px;border-radius:8px}
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>Koordinatkonverterare (Sverige + Göteborg)</h1>
     <p class="sub">
-      Stöd för WGS84 (lat/lon), SWEREF 99 TM, SWEREF 99 zoner (inkl. Göteborg: SWEREF 99 12 00 / EPSG:3007),
-      RT90 2.5 gon V samt UTM/WebMercator.
+      Stöd för WGS84 (lat/lon), SWEREF 99 TM, SWEREF 99 zoner (inkl. Göteborg: SWEREF 99 12 00 / EPSG:3007), RT90 2.5 gon V samt UTM/WebMercator.
+      <br>
+      Extra: Höjdomräkning GH88 ↔ RH2000 (Göteborg bytte 2013; skift 9,953 m). :contentReference[oaicite:2]{index=2}
     </p>
 
     <div class="grid">
@@ -58,11 +64,11 @@
         <div id="panelSingle">
           <div class="row">
             <div>
-              <label for="fromCrs">Från koordinatsystem</label>
+              <label for="fromCrs">Från koordinatsystem (plan)</label>
               <select id="fromCrs"></select>
             </div>
             <div>
-              <label for="toCrs">Till koordinatsystem</label>
+              <label for="toCrs">Till koordinatsystem (plan)</label>
               <select id="toCrs"></select>
             </div>
           </div>
@@ -78,383 +84,7 @@
             </div>
           </div>
 
-          <div class="btnrow">
-            <button class="primary" id="btnConvert">Konvertera</button>
-            <button class="ghost" id="btnSwap">Byt från/till</button>
-            <button class="ghost" id="btnClear">Rensa</button>
-            <button class="ghost" id="btnCopy">Kopiera resultat</button>
-          </div>
-
-          <p class="hint">
-            Tips: För projicerade system skriver du normalt <span class="pill">N (northing)</span> och <span class="pill">E (easting)</span>.
-            För WGS84 skriver du <span class="pill">Lat</span> och <span class="pill">Lon</span>. Appen byter etiketter automatiskt.
-          </p>
-        </div>
-
-        <!-- BATCH -->
-        <div id="panelBatch" style="display:none">
-          <div class="row">
+          <div class="row3">
             <div>
-              <label for="fromCrsB">Från koordinatsystem</label>
-              <select id="fromCrsB"></select>
-            </div>
-            <div>
-              <label for="toCrsB">Till koordinatsystem</label>
-              <select id="toCrsB"></select>
-            </div>
-          </div>
-
-          <label for="batchIn">Indata (en punkt per rad)</label>
-          <textarea id="batchIn" placeholder="Exempel (projicerat):
-6400000  320000
-6400100  320050
-
-Exempel (WGS84):
-57.707233  11.967017"></textarea>
-
-          <div class="btnrow">
-            <button class="primary" id="btnConvertBatch">Konvertera batch</button>
-            <button class="ghost" id="btnCopyBatch">Kopiera utdata</button>
-            <button class="ghost" id="btnClearBatch">Rensa</button>
-          </div>
-
-          <p class="hint">
-            Separatorer: mellanslag, tab, komma eller semikolon. För projicerade system tolkar vi raden som <b>N E</b>.
-            För WGS84 tolkar vi som <b>Lat Lon</b>.
-          </p>
-        </div>
-      </div>
-
-      <div class="card">
-        <div style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap">
-          <div class="pill" id="statusPill">Redo</div>
-          <div class="pill" id="mapPill" style="display:none">
-            <a id="mapLink" href="#" target="_blank" rel="noopener">Öppna i Google Maps</a>
-          </div>
-        </div>
-
-        <label>Resultat</label>
-        <div class="out" id="out">—</div>
-
-        <div class="hint">
-          Visar alltid även WGS84 (lat/lon) som extra kontroll när det går.
-          (Koordinattransformationer kan påverkas av val av transformationssamband i mer avancerade GIS-flöden.)
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Proj4js -->
-  <script src="https://cdn.jsdelivr.net/npm/proj4@2.11.0/dist/proj4.js"></script>
-  <script>
-    // --- CRS registry (common in Sweden) ---
-    // EPSG refs/defs based on epsg.io definitions for Sweden:
-    // 3006 SWEREF99 TM; 3007 SWEREF99 12 00; 3008 SWEREF99 13 30; 3009 SWEREF99 15 00; 3010 SWEREF99 16 30; 3011 SWEREF99 18 00; 3021 RT90 2.5 gon V.
-    const CRS = [
-      { code:"EPSG:4326", name:"WGS84 (lat/lon)", type:"geographic" },
-      { code:"EPSG:3006", name:"SWEREF 99 TM (EPSG:3006)", type:"projected" },
-      { code:"EPSG:3007", name:"SWEREF 99 12 00 (Göteborg) (EPSG:3007)", type:"projected" },
-      { code:"EPSG:3008", name:"SWEREF 99 13 30 (EPSG:3008)", type:"projected" },
-      { code:"EPSG:3009", name:"SWEREF 99 15 00 (EPSG:3009)", type:"projected" },
-      { code:"EPSG:3010", name:"SWEREF 99 16 30 (EPSG:3010)", type:"projected" },
-      { code:"EPSG:3011", name:"SWEREF 99 18 00 (EPSG:3011)", type:"projected" },
-      { code:"EPSG:3021", name:"RT90 2.5 gon V (EPSG:3021)", type:"projected" },
-      { code:"EPSG:32633", name:"WGS84 / UTM zone 33N (EPSG:32633)", type:"projected" },
-      { code:"EPSG:32632", name:"WGS84 / UTM zone 32N (EPSG:32632)", type:"projected" },
-      { code:"EPSG:3857", name:"Web Mercator (EPSG:3857)", type:"projected" },
-    ];
-
-    // --- Define projections (Proj4 expects [x,y] = [E,N] for projected, [lon,lat] for geographic) ---
-    // SWEREF 99 TM (epsg.io/3006.proj4)
-    proj4.defs("EPSG:3006", "+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // SWEREF 99 12 00 (epsg.io/3007.proj4)
-    proj4.defs("EPSG:3007", "+proj=tmerc +lat_0=0 +lon_0=12 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // SWEREF 99 13 30 (epsg.io/3008.proj4js)
-    proj4.defs("EPSG:3008", "+proj=tmerc +lat_0=0 +lon_0=13.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // SWEREF 99 15 00 (epsg.io/3009.proj4)
-    proj4.defs("EPSG:3009", "+proj=tmerc +lat_0=0 +lon_0=15 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // SWEREF 99 16 30 (epsg.io/3010.js?download=1)
-    proj4.defs("EPSG:3010", "+proj=tmerc +lat_0=0 +lon_0=16.5 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // SWEREF 99 18 00 (central meridian 18, false easting 150000) (epsg.io/5850 shows params for 3011)
-    proj4.defs("EPSG:3011", "+proj=tmerc +lat_0=0 +lon_0=18 +k=1 +x_0=150000 +y_0=0 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs +type=crs");
-    // RT90 2.5 gon V (epsg.io/3021.proj4)
-    proj4.defs("EPSG:3021", "+proj=tmerc +lat_0=0 +lon_0=15.8082777777778 +k=1 +x_0=1500000 +y_0=0 +ellps=bessel +towgs84=414.1,41.3,603.1,-0.855,2.141,-7.023,0 +units=m +no_defs +type=crs");
-    // UTM
-    proj4.defs("EPSG:32633", "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs +type=crs");
-    proj4.defs("EPSG:32632", "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs");
-    // EPSG:3857 and EPSG:4326 are known by many proj4 builds, but keep safe:
-    proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs +type=crs");
-    proj4.defs("EPSG:3857", "+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs +type=crs");
-
-    // --- UI helpers ---
-    const $ = (id) => document.getElementById(id);
-    const statusPill = $("statusPill");
-    const out = $("out");
-    const mapPill = $("mapPill");
-    const mapLink = $("mapLink");
-
-    function setStatus(msg, isError=false){
-      statusPill.textContent = msg;
-      statusPill.classList.toggle("err", !!isError);
-    }
-
-    function fillSelect(sel, defaultCode){
-      sel.innerHTML = "";
-      CRS.forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c.code;
-        opt.textContent = c.name;
-        sel.appendChild(opt);
-      });
-      sel.value = defaultCode || CRS[0].code;
-    }
-
-    function getCrs(code){
-      const c = CRS.find(x => x.code === code);
-      if(!c) throw new Error("Okänt CRS: " + code);
-      return c;
-    }
-
-    function updateLabels(fromCode){
-      const from = getCrs(fromCode);
-      if(from.type === "geographic"){
-        $("aLabel").textContent = "Lat (N)";
-        $("bLabel").textContent = "Lon (E)";
-        $("aVal").placeholder = "t.ex. 57.707233 eller 57 42 26.0";
-        $("bVal").placeholder = "t.ex. 11.967017 eller 11 58 1.3";
-      } else {
-        $("aLabel").textContent = "N (northing)";
-        $("bLabel").textContent = "E (easting)";
-        $("aVal").placeholder = "t.ex. 6400000.00";
-        $("bVal").placeholder = "t.ex. 320000.00";
-      }
-    }
-
-    // --- Parsing ---
-    function parseNumberFlexible(s){
-      if(!s) return NaN;
-      // allow decimal comma
-      return Number(String(s).trim().replace(",", "."));
-    }
-
-    // Accept "57 42 26.1" or "57°42'26.1\"" or "57 42.5" (deg min.dec)
-    function parseAngleFlexible(s){
-      s = String(s || "").trim();
-      if(!s) return NaN;
-      // If it's a plain number, use it
-      const n = parseNumberFlexible(s);
-      if(Number.isFinite(n)) return n;
-
-      // Remove degree/min/sec symbols, keep separators
-      const cleaned = s
-        .replace(/[°º]/g," ")
-        .replace(/[′']/g," ")
-        .replace(/[″"]/g," ")
-        .replace(/[NSEW]/gi," ")
-        .replace(/,/g,".")
-        .trim();
-
-      const parts = cleaned.split(/\s+/).filter(Boolean).map(x => Number(x));
-      if(parts.length === 0 || parts.some(x => !Number.isFinite(x))) return NaN;
-
-      const deg = parts[0];
-      const min = parts.length > 1 ? parts[1] : 0;
-      const sec = parts.length > 2 ? parts[2] : 0;
-
-      const sign = deg < 0 ? -1 : 1;
-      const abs = Math.abs(deg) + (min/60) + (sec/3600);
-      return sign * abs;
-    }
-
-    function toDMS(deg){
-      const sign = deg < 0 ? -1 : 1;
-      let a = Math.abs(deg);
-      const d = Math.floor(a);
-      a = (a - d) * 60;
-      const m = Math.floor(a);
-      const s = (a - m) * 60;
-      const dd = sign < 0 ? -d : d;
-      return `${dd}° ${m}' ${s.toFixed(3)}"`;
-    }
-
-    function toProjInput(crs, a, b){
-      // UI uses (a,b) = (Lat,Lon) OR (N,E)
-      if(crs.type === "geographic"){
-        const lat = a, lon = b;
-        return [lon, lat]; // proj4 wants [lon,lat]
-      } else {
-        const N = a, E = b;
-        return [E, N]; // proj4 wants [E,N]
-      }
-    }
-
-    function fromProjOutput(crs, xy){
-      // proj4 returns [x,y] = [lon,lat] or [E,N]
-      if(crs.type === "geographic"){
-        const lon = xy[0], lat = xy[1];
-        return { lat, lon };
-      } else {
-        const E = xy[0], N = xy[1];
-        return { N, E };
-      }
-    }
-
-    function formatOut(target, obj){
-      if(target.type === "geographic"){
-        return `Lat: ${obj.lat.toFixed(8)}   (${toDMS(obj.lat)})\nLon: ${obj.lon.toFixed(8)}   (${toDMS(obj.lon)})`;
-      }
-      return `N: ${obj.N.toFixed(3)}\nE: ${obj.E.toFixed(3)}`;
-    }
-
-    function compute(){
-      try{
-        setStatus("Konverterar…");
-        mapPill.style.display = "none";
-
-        const fromCode = $("fromCrs").value;
-        const toCode = $("toCrs").value;
-        const from = getCrs(fromCode);
-        const to = getCrs(toCode);
-
-        let aRaw = $("aVal").value;
-        let bRaw = $("bVal").value;
-
-        const a = (from.type === "geographic") ? parseAngleFlexible(aRaw) : parseNumberFlexible(aRaw);
-        const b = (from.type === "geographic") ? parseAngleFlexible(bRaw) : parseNumberFlexible(bRaw);
-
-        if(!Number.isFinite(a) || !Number.isFinite(b)) throw new Error("Ogiltig indata. Kontrollera värdena.");
-
-        const inXY = toProjInput(from, a, b);
-        const outXY = proj4(from.code, to.code, inXY);
-        const outObj = fromProjOutput(to, outXY);
-
-        // Also compute WGS84 for sanity/map link
-        const wgsXY = proj4(from.code, "EPSG:4326", inXY);
-        const wgs = fromProjOutput(getCrs("EPSG:4326"), wgsXY);
-
-        const block =
-`🎯 Till: ${to.name}
-${formatOut(to, outObj)}
-
-🧭 WGS84 (kontroll)
-${formatOut(getCrs("EPSG:4326"), wgs)}
-`;
-        out.textContent = block;
-        setStatus("Klar");
-
-        // Maps link (if lat/lon sane)
-        if(Number.isFinite(wgs.lat) && Number.isFinite(wgs.lon) && Math.abs(wgs.lat) <= 90 && Math.abs(wgs.lon) <= 180){
-          mapLink.href = `https://www.google.com/maps?q=${encodeURIComponent(wgs.lat + "," + wgs.lon)}`;
-          mapPill.style.display = "inline-flex";
-        }
-      }catch(e){
-        out.textContent = "—";
-        setStatus(e.message || "Fel", true);
-      }
-    }
-
-    function swapFromTo(){
-      const a = $("fromCrs").value;
-      $("fromCrs").value = $("toCrs").value;
-      $("toCrs").value = a;
-      updateLabels($("fromCrs").value);
-    }
-
-    async function copyText(text){
-      try{
-        await navigator.clipboard.writeText(text);
-        setStatus("Kopierat!");
-      }catch{
-        setStatus("Kunde inte kopiera (webbläsarbegränsning).", true);
-      }
-    }
-
-    // --- Batch ---
-    function parseLine(line){
-      // allow: "a b", "a,b", "a;b"
-      const parts = line.trim().split(/[,\s;]+/).filter(Boolean);
-      if(parts.length < 2) return null;
-      return [parts[0], parts[1]];
-    }
-
-    function computeBatch(){
-      try{
-        setStatus("Konverterar batch…");
-        const fromCode = $("fromCrsB").value;
-        const toCode = $("toCrsB").value;
-        const from = getCrs(fromCode);
-        const to = getCrs(toCode);
-
-        const lines = $("batchIn").value.split(/\r?\n/);
-        const outLines = [];
-        outLines.push(`# from: ${from.name}`);
-        outLines.push(`# to:   ${to.name}`);
-        outLines.push(`# format: ${to.type === "geographic" ? "lat lon" : "N E"}`);
-        outLines.push("");
-
-        let ok = 0;
-        for(const ln of lines){
-          if(!ln.trim()) continue;
-          const pair = parseLine(ln);
-          if(!pair){ outLines.push(`# skip: ${ln}`); continue; }
-
-          const a = (from.type === "geographic") ? parseAngleFlexible(pair[0]) : parseNumberFlexible(pair[0]);
-          const b = (from.type === "geographic") ? parseAngleFlexible(pair[1]) : parseNumberFlexible(pair[1]);
-          if(!Number.isFinite(a) || !Number.isFinite(b)){
-            outLines.push(`# bad: ${ln}`);
-            continue;
-          }
-
-          const inXY = toProjInput(from, a, b);
-          const outXY = proj4(from.code, to.code, inXY);
-          const obj = fromProjOutput(to, outXY);
-
-          if(to.type === "geographic"){
-            outLines.push(`${obj.lat.toFixed(8)} ${obj.lon.toFixed(8)}`);
-          } else {
-            outLines.push(`${obj.N.toFixed(3)} ${obj.E.toFixed(3)}`);
-          }
-          ok++;
-        }
-
-        out.textContent = outLines.join("\n");
-        setStatus(`Klar (rader: ${ok})`);
-        mapPill.style.display = "none";
-      }catch(e){
-        out.textContent = "—";
-        setStatus(e.message || "Fel", true);
-      }
-    }
-
-    // --- Init ---
-    fillSelect($("fromCrs"), "EPSG:4326");
-    fillSelect($("toCrs"), "EPSG:3007");
-    fillSelect($("fromCrsB"), "EPSG:3007");
-    fillSelect($("toCrsB"), "EPSG:4326");
-
-    updateLabels($("fromCrs").value);
-    $("fromCrs").addEventListener("change", () => updateLabels($("fromCrs").value));
-
-    $("btnConvert").addEventListener("click", compute);
-    $("btnSwap").addEventListener("click", swapFromTo);
-    $("btnClear").addEventListener("click", () => { $("aVal").value=""; $("bVal").value=""; out.textContent="—"; setStatus("Redo"); mapPill.style.display="none"; });
-    $("btnCopy").addEventListener("click", () => copyText(out.textContent));
-
-    $("btnConvertBatch").addEventListener("click", computeBatch);
-    $("btnCopyBatch").addEventListener("click", () => copyText(out.textContent));
-    $("btnClearBatch").addEventListener("click", () => { $("batchIn").value=""; out.textContent="—"; setStatus("Redo"); });
-
-    // Tabs
-    $("tabSingle").addEventListener("click", () => {
-      $("tabSingle").classList.add("active"); $("tabBatch").classList.remove("active");
-      $("panelSingle").style.display = ""; $("panelBatch").style.display = "none";
-      setStatus("Redo"); mapPill.style.display="none"; out.textContent="—";
-    });
-    $("tabBatch").addEventListener("click", () => {
-      $("tabBatch").classList.add("active"); $("tabSingle").classList.remove("active");
-      $("panelBatch").style.display = ""; $("panelSingle").style.display = "none";
-      setStatus("Redo"); mapPill.style.display="none"; out.textContent="—";
-    });
-  </script>
-</body>
-</html>
+              <label for="hVal">Höjd (m) (valfri)</label>
+              <input id="hVal" inputmode="decimal" placeholder="t.ex. 12.34" /
